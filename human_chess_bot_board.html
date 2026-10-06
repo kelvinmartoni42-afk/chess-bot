@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Human Chess Bot</title>
+<style>
+body{font-family:system-ui,sans-serif;background:#111;color:#eee;text-align:center;margin:0;padding:20px}
+#board{width:min(92vw,560px);height:min(92vw,560px);margin:18px auto;display:grid;grid-template-columns:repeat(8,1fr);border:4px solid #333}
+.sq{display:flex;align-items:center;justify-content:center;font-size:clamp(30px,8vw,58px);cursor:pointer;user-select:none}
+.light{background:#f0d9b5}.dark{background:#b58863}
+.selected{outline:4px solid #4caf50;outline-offset:-4px}
+.dot:after{content:"";width:18%;height:18%;border-radius:50%;background:#333;opacity:.55}
+button{padding:10px 16px;border:0;border-radius:8px;margin:4px;cursor:pointer}
+#status{min-height:28px}
+</style>
+</head>
+<body>
+<h2>♟ Human Chess Bot</h2>
+<div id="status">Giliran kamu (Putih)</div>
+<div id="board"></div>
+<button onclick="newGame()">Game Baru</button>
+<script>
+const P={p:"♟",r:"♜",n:"♞",b:"♝",q:"♛",k:"♚",P:"♙",R:"♖",N:"♘",B:"♗",Q:"♕",K:"♔"};
+let board,selected=null,turn="w",gameOver=false;
+
+function newGame(){
+ board=[
+ ["r","n","b","q","k","b","n","r"],["p","p","p","p","p","p","p","p"],
+ ["","","","","","","",""],["","","","","","","",""],
+ ["","","","","","","",""],["","","","","","","",""],
+ ["P","P","P","P","P","P","P","P"],["R","N","B","Q","K","B","N","R"]];
+ selected=null;turn="w";gameOver=false;render();
+}
+function color(x){return x&&x===x.toUpperCase()?"w":"b"}
+function inside(r,c){return r>=0&&r<8&&c>=0&&c<8}
+function pseudo(r,c,tr,tc){
+ let x=board[r][c], t=board[tr][tc]; if(!x||color(x)!=="w"|| (t&&color(t)==="w")) return false;
+ let dr=tr-r,dc=tc-c, a=Math.abs(dr),b=Math.abs(dc),type=x.toLowerCase();
+ if(type==="p") return (dc===0&&dr===-1&&!t)||(dc===0&&dr===-2&&r===6&&!t&&!board[5][c])||(a===1&&dr===-1&&b===1&&t);
+ if(type==="n") return (a===2&&b===1)||(a===1&&b===2);
+ if(type==="k") return a<=1&&b<=1;
+ if(type==="b"||type==="q") if(a===b){let sr=dr/a,sc=dc/b;for(let i=1;i<a;i++)if(board[r+i*sr][c+i*sc])return false;return true}
+ if(type==="r"||type==="q") if(dr===0||dc===0){let n=Math.max(a,b),sr=dr?dr/n:0,sc=dc?dc/n:0;for(let i=1;i<n;i++)if(board[r+i*sr][c+i*sc])return false;return true}
+ return false;
+}
+function legal(r,c,tr,tc){return pseudo(r,c,tr,tc)}
+function movesFor(x){
+ let out=[],r=x[0],c=x[1];
+ for(let tr=0;tr<8;tr++)for(let tc=0;tc<8;tc++)if(legal(r,c,tr,tc))out.push([tr,tc]);
+ return out;
+}
+function move(a,b){
+ board[b[0]][b[1]]=board[a[0]][a[1]];board[a[0]][a[1]]="";
+ // auto-promote pawns
+ if(b[0]===0&&board[b[0]][b[1]]==="P")board[b[0]][b[1]]="Q";
+ if(b[0]===7&&board[b[0]][b[1]]==="p")board[b[0]][b[1]]="q";
+}
+function render(){
+ const el=document.getElementById("board");el.innerHTML="";
+ for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+  let d=document.createElement("div");d.className="sq "+((r+c)%2?"dark":"light");
+  d.textContent=P[board[r][c]]||"";
+  if(selected&&selected[0]===r&&selected[1]===c)d.classList.add("selected");
+  if(selected&&movesFor(selected).some(m=>m[0]===r&&m[1]===c))d.classList.add("dot");
+  d.onclick=()=>click(r,c);el.appendChild(d);
+ }
+ document.getElementById("status").textContent=gameOver?"Game selesai":turn==="w"?"Giliran kamu (Putih)":"Bot berpikir...";
+}
+function click(r,c){
+ if(gameOver||turn!=="w")return;
+ let x=board[r][c];
+ if(selected){
+  if(legal(selected[0],selected[1],r,c)){move(selected,[r,c]);selected=null;turn="b";render();setTimeout(bot,350);return}
+ }
+ if(x&&color(x)==="w")selected=[r,c];else selected=null;
+ render();
+}
+function scoreMove(a,b){
+ let target=board[b[0]][b[1]],v={p:100,n:320,b:330,r:500,q:900,k:20000};
+ return (target? v[target.toLowerCase()]:0)+Math.random()*180;
+}
+function bot(){
+ let all=[];
+ for(let r=0;r<8;r++)for(let c=0;c<8;c++)if(board[r][c]&&color(board[r][c])==="b")
+   for(let m of blackMoves(r,c))all.push([[r,c],m]);
+ if(!all.length){gameOver=true;turn="b";render();return}
+ all.sort((x,y)=>scoreMove(y[0],y[1])-scoreMove(x[0],x[1]));
+ let pool=all.slice(0,Math.min(5,all.length));
+ let pick=pool[Math.random()<.72?0:Math.floor(Math.random()*pool.length)];
+ move(pick[0],pick[1]);turn="w";render();
+}
+function blackMoves(r,c){
+ let x=board[r][c],out=[];
+ for(let tr=0;tr<8;tr++)for(let tc=0;tc<8;tc++){
+  let t=board[tr][tc];if(t&&color(t)==="b")continue;
+  let dr=tr-r,dc=tc-c,a=Math.abs(dr),b=Math.abs(dc),type=x.toLowerCase(),ok=false;
+  if(type==="p")ok=dc===0&&dr===1&&!t||(dc===0&&dr===2&&r===1&&!t&&!board[2][c])||(a===1&&dr===1&&b===1&&t);
+  if(type==="n")ok=(a===2&&b===1)||(a===1&&b===2);
+  if(type==="k")ok=a<=1&&b<=1;
+  if(type==="b"||type==="q")if(a===b){let sr=dr/a,sc=dc/b;ok=true;for(let i=1;i<a;i++)if(board[r+i*sr][c+i*sc])ok=false}
+  if(type==="r"||type==="q")if(dr===0||dc===0){let n=Math.max(a,b),sr=dr?dr/n:0,sc=dc?dc/n:0;ok=true;for(let i=1;i<n;i++)if(board[r+i*sr][c+i*sc])ok=false}
+  if(ok)out.push([tr,tc]);
+ } return out;
+}
+newGame();
+</script>
+</body>
+</html>
